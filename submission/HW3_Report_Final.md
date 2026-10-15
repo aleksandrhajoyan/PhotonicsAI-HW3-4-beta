@@ -11,11 +11,10 @@ the vendor's HuaRay IMV SDK
 
 > **GitHub repository URL:** <https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta>
 >
-> **Editorial note (remove before PDF export).** The demonstration videos are delivered as
-> assets of a GitHub Release of this repository; their download links are still pending and will
-> be added once the Release exists (Section 18.3). This Markdown is the source for the final PDF
-> and must not be exported or submitted until the repository contents and the Release have been
-> checked and this note is updated.
+> **Demonstration videos (GitHub Release):**
+> <https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/tag/hw3-submission>
+>
+> Direct download links for the three recordings are listed in Section 18.3.
 
 **Evidence policy.** Every number in this report comes from one of the sources below. The report
 states which source applies to each claim.
@@ -85,7 +84,7 @@ point values are those stated in the assignment; no points are claimed as awarde
 | **(c) One agent holds tools** (4) | One of the original HW1/HW2 agents holds hardware tools; its tool calls are selected by the model from the dialogue | The original HW1 **Executor** (`LumenAgentSystem` in `hw3/lumen_agent_system.py`, subclass of HW1 `AgenticSilverboxSystem`) is the only role that can reach the camera. The Orchestrator model selects the Executor from the dialogue; the Executor's hardware model selects every MCP call (`AdaptiveMCPExecutor` in `hw3/executor_mcp_loop.py`, validated by `parse_decision`) | D6A: the Executor, chosen by the Orchestrator, made 7 model decisions and 6 model-selected MCP calls. D5A: the same hardware loop on its own | 6, 7, 8 | 6, 11.3 |
 | **(d) Hardware in the loop** (4) | The graph dispatches the hardware turn; the agent chooses a command, the instrument acts, the measurement enters the dialogue, and a following model decision uses it | The HW1 graph routes `orchestrator → executor`; the Executor node dispatches once through `hw3/executor_dialogue_bridge.py`. Inside the turn, `latest_measurement` is returned to the model before its next decision. `format_executor_turn()` writes the measured DN into the shared dialogue as a `LUMEN_EXPERIMENT_COMPLETED` turn | D5A and D6A: decision 4 chose `camera_set_exposure(5000.0)` **after** measurement 1 (16.0118 DN / 15.5104 DN) was in the model's input. D6A: after the Executor's turn, the Orchestrator routed to **General**, which wrote the conclusion from the measured DN | 7, 8 | 6, 11.2, 11.3 |
 | **(e) Diagrams** (4) | Whole-system architecture diagram covering HW1's four roles, HW2's human stop and simulated bench, and HW3's connector, MCP server and hardware turn; sequence diagrams of the runs | Mermaid sources in `hw3/docs/system_diagrams.md`, rendered to SVG in `hw3/docs/figures/` | Figure 7 follows the recorded D6A run; Figures 4 and 5 follow recorded HW2 runs | **8** (whole system), 1–7 | 5, 13 |
-| **(f) Use cases and demo** (6) | Several use cases, each with the request, the agent's tool calls and the actual instrument response; a recorded demo of model choice, MCP call and hardware response | `hw3/physical_mcp_smoke.py` (D4), `hw3/physical_adaptive_cli.py` (D5A), `hw3/physical_lumen_cli.py` (D6A) | Three physical use cases with measured DN (Section 11). Videos `HW3_02_Adaptive_LLM_D5A.mp4` and `HW3_03_Four_Agent_LUMEN_D6A.mp4` show model decisions, MCP calls and hardware responses; `HW3_01_Physical_MCP_D4.mp4` shows the fixed MCP path (operator-confirmed) | 7 | 11, 12, 18.3 |
+| **(f) Use cases and demo** (6) | Several use cases, each with the request, the agent's tool calls and the actual instrument response; a recorded demo of model choice, MCP call and hardware response | `hw3/physical_mcp_smoke.py` (D4), `hw3/physical_adaptive_cli.py` (D5A), `hw3/physical_lumen_cli.py` (D6A) | Three physical use cases with measured DN (Section 11). Videos (GitHub Release `hw3-submission`, Section 18.3) `HW3_02_Adaptive_LLM_D5A.mp4` and `HW3_03_Four_Agent_LUMEN_D6A.mp4` show model decisions, MCP calls and hardware responses; `HW3_01_Physical_MCP_D4.mp4` shows the fixed MCP path (operator-confirmed) | 7 | 11, 12, 18.3 |
 
 **Precision note on criterion (c).** The Executor's *dispatch* is selected by the Orchestrator
 model from the shared dialogue. Each individual *MCP call* is selected by the Executor's hardware
@@ -762,6 +761,10 @@ same MCP path with a fixed call list and is described in Section 11.1.
     `hw3/docs/system_diagrams.md` §7. The suite was run again on 2026-10-15, after `mcp` and
     `pydantic` were declared in `requirements.txt`: 1004 tests, `OK`, exit code 0.
   - The tests were not re-run specifically for this revision of the report.
+- **HW2 regression tests.** After the HW3 work was committed (commit `75019ee`), the HW2 offline
+  suite (`unittest discover -s hw2/tests`) was run on 2026-10-15: 146 tests, `OK`, exit code 0,
+  including the six tests that check that the HW1 files, `README.md` and `requirements.txt`
+  have no uncommitted changes.
 - **Physical PASS evidence.**
 
   | Run | Evidence |
@@ -853,9 +856,12 @@ light, with one feedback-driven exposure correction in each of the two independe
 The submission rules require the code to be pushed to GitHub and the URL to appear in the PDF.
 This is the code repository for this report. Its HW3 package consists of the HW3 source code,
 the offline tests, the documentation, the eight SVG diagrams and this report, together with the
-HW1 and HW2 code it builds on. The demonstration
-videos are delivered as GitHub Release assets (Section 18.3); their links are pending until the
-Release exists.
+HW1 and HW2 code it builds on. The HW3 code was published in commit
+`75019eec69bdc28efbdd83fc55b5ba2f1999eefd` on the repository's `main` branch.
+
+**Demonstration videos:** GitHub Release `hw3-submission`,
+<https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/tag/hw3-submission>. The
+three recordings are Release assets, not regular Git files (Section 18.3).
 
 ---
 
@@ -886,16 +892,19 @@ The eight SVG files are in `hw3/docs/figures/`. Figure 8 is embedded in Section 
 
 | File | Duration | Size (bytes) | Content and evidence status |
 |---|---|---|---|
-| `HW3_01_Physical_MCP_D4.mp4` | not recorded here | 14,565,816 | Successful D4 fixed physical MCP run (no model), **according to the operator**. It replaces an earlier recording and was **not independently inspected** |
-| `HW3_02_Adaptive_LLM_D5A.mp4` | 54 s | 56,337,631 | **Inspected:** the D5A run (model-selected MCP calls), from launch to `PHYSICAL_ADAPTIVE_CHECK: PASS` and exit code 0. Shows model choices, MCP calls and hardware responses |
-| `HW3_03_Four_Agent_LUMEN_D6A.mp4` | 1 min 35 s | 95,763,388 | **Inspected:** the D6A run (four agents; model-selected MCP calls), from launch to `PHYSICAL_LUMEN_CHECK: PASS` and exit code 0. Shows model choices, MCP calls and hardware responses |
+| [`HW3_01_Physical_MCP_D4.mp4`](https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/download/hw3-submission/HW3_01_Physical_MCP_D4.mp4) | not recorded here | 14,565,816 | Successful D4 fixed physical MCP run (no model), **according to the operator**. It replaces an earlier recording and was **not independently inspected** |
+| [`HW3_02_Adaptive_LLM_D5A.mp4`](https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/download/hw3-submission/HW3_02_Adaptive_LLM_D5A.mp4) | 54 s | 56,337,631 | **Inspected:** the D5A run (model-selected MCP calls), from launch to `PHYSICAL_ADAPTIVE_CHECK: PASS` and exit code 0. Shows model choices, MCP calls and hardware responses |
+| [`HW3_03_Four_Agent_LUMEN_D6A.mp4`](https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/download/hw3-submission/HW3_03_Four_Agent_LUMEN_D6A.mp4) | 1 min 35 s | 95,763,388 | **Inspected:** the D6A run (four agents; model-selected MCP calls), from launch to `PHYSICAL_LUMEN_CHECK: PASS` and exit code 0. Shows model choices, MCP calls and hardware responses |
 
 **Video delivery.** The submission rules require the video to be in GitHub or attached to the
-email. Because of their size, the three recordings are not stored in the Git repository; they are
-planned as assets of a GitHub Release of the repository named in Section 17.
+email. Because of their size, the three recordings are not stored in the Git repository. They are
+assets of the published GitHub Release `hw3-submission`:
+<https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/tag/hw3-submission>.
 
-> **Release link pending.** No Release has been published yet. Download links for the three
-> files above will be added after the operator publishes the Release.
+The file names in the table link to the asset download URLs reported by the GitHub Releases API
+on 2026-10-15 (release published, not a draft; each asset in state `uploaded`). The reported
+asset sizes are identical, byte for byte, to the sizes in the table. The video contents were not
+re-downloaded or re-inspected for this check.
 
 The following files are **not HW3 physical evidence**:
 

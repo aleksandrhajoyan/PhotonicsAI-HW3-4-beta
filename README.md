@@ -14,9 +14,12 @@ Homework 3. Homework 3 is introduced first; the HW1 and HW2 documentation follow
 **Start here:** [`hw3/README.md`](hw3/README.md) for setup and how to run the experiments, and
 [`submission/HW3_Report_Final.md`](submission/HW3_Report_Final.md) for the technical report.
 
-> **Demonstration videos.** The three HW3 screen recordings are not stored in the Git
-> repository because of their size. They are delivered separately as assets of a GitHub Release
-> of this repository, once that Release is available; see the Releases page of the repository.
+> **Demonstration videos.** The three HW3 screen recordings are distributed as **GitHub Release
+> assets**, not as regular Git files (they are git-ignored because of their size). Download them
+> from the Release
+> [`hw3-submission`](https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/tag/hw3-submission):
+> `HW3_01_Physical_MCP_D4.mp4`, `HW3_02_Adaptive_LLM_D5A.mp4` and
+> `HW3_03_Four_Agent_LUMEN_D6A.mp4`.
 
 LUMEN connects the original HW1 four-role LangGraph system to a real physical instrument:
 

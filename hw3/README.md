@@ -261,16 +261,15 @@ Minimum/maximum DN, decision traces and evidence provenance are documented in
 ## 7. Demonstration videos
 
 The three recordings are **not stored in the Git repository** (`*.mp4` is git-ignored because of
-their size). They are planned as assets of a GitHub Release of this repository.
+their size). They are distributed as assets of the GitHub Release
+[`hw3-submission`](https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/tag/hw3-submission).
+The download links below are the asset URLs reported by the GitHub Releases API.
 
-> **Download links pending.** Links will be added here **after** the operator publishes the
-> GitHub Release. Until then, only the file names below are given.
-
-| File | Content | Evidence status |
+| File (download) | Content | Evidence status |
 |---|---|---|
-| `HW3_01_Physical_MCP_D4.mp4` | D4 fixed physical MCP diagnostic (no model) | Successful run **according to the operator**; not independently re-inspected. It is not claimed to show the exact D4 values in Section 6 |
-| `HW3_02_Adaptive_LLM_D5A.mp4` | D5A adaptive LLM experiment (model-selected MCP calls) | Inspected in an earlier review |
-| `HW3_03_Four_Agent_LUMEN_D6A.mp4` | D6A four-agent physical LUMEN run (model-selected MCP calls) | Inspected in an earlier review |
+| [`HW3_01_Physical_MCP_D4.mp4`](https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/download/hw3-submission/HW3_01_Physical_MCP_D4.mp4) | D4 fixed physical MCP diagnostic (no LLM decision) | Successful run **according to the operator**; not independently re-inspected. It is not claimed to show the exact D4 values in Section 6 |
+| [`HW3_02_Adaptive_LLM_D5A.mp4`](https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/download/hw3-submission/HW3_02_Adaptive_LLM_D5A.mp4) | D5A adaptive LLM experiment (model-selected hardware commands) | Inspected in an earlier review |
+| [`HW3_03_Four_Agent_LUMEN_D6A.mp4`](https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta/releases/download/hw3-submission/HW3_03_Four_Agent_LUMEN_D6A.mp4) | D6A four-agent LUMEN physical experiment (model-selected MCP calls) | Inspected in an earlier review |
 
 Two other local recordings (`demo2 hw3.mp4`, `photonicsai hw 2 Aleqsandr Hajoyan.mp4`) belong to
 HW2, are **not** HW3 physical evidence and are not published with HW3.
