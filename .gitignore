@@ -11,3 +11,10 @@ SilverboxFiles/
 *.mat
 # Task 6 run evidence is committed; large binary artifacts are not
 task6/validated_run*/**/*.npy
+# HW3: recordings are delivered as GitHub Release assets; internal audits and
+# files with machine-local data or an unmasked camera serial are not published
+*.mp4
+submission/_build/
+hw3/docs/submission_readiness.md
+hw3/docs/final_preflight.md
+mvviewer screenshot.png

@@ -1,6 +1,60 @@
-# PhotonicsAI Homework — Tasks 5 and 6
+# PhotonicsAI Homework — HW1 (Tasks 5 and 6), HW2 and HW3
 
-This repository contains the code for the two coding tasks.
+This repository contains the code for PhotonicsAI Homework 1 (Tasks 5 and 6), Homework 2 and
+Homework 3. Homework 3 is introduced first; the HW1 and HW2 documentation follows unchanged.
+
+---
+
+# Homework 3 — LUMEN: Autonomous Lensless Measurement & Experimentation Network
+
+**Official assignment:** PhotonicsAI Homework 3 — Hardware in the Loop.
+
+**GitHub repository:** <https://github.com/aleksandrhajoyan/PhotonicsAI-HW3-4-beta>
+
+**Start here:** [`hw3/README.md`](hw3/README.md) for setup and how to run the experiments, and
+[`submission/HW3_Report_Final.md`](submission/HW3_Report_Final.md) for the technical report.
+
+> **Demonstration videos.** The three HW3 screen recordings are not stored in the Git
+> repository because of their size. They are delivered separately as assets of a GitHub Release
+> of this repository, once that Release is available; see the Releases page of the repository.
+
+LUMEN connects the original HW1 four-role LangGraph system to a real physical instrument:
+
+- **Camera:** iRAYPLE MV-A7200MU130, USB3, 1920 × 1200 **Mono8**, **no objective lens**. All
+  measured values are raw, uncalibrated digital numbers (DN).
+- **Interface:** the manufacturer's official **HuaRay IMV SDK** (Python binding `IMVApi`),
+  wrapped by the `IRaypleCamera` connector.
+- **Four roles:** Orchestrator, Scientist, General and Executor, from HW1, reused without
+  modification.
+- **Only the Executor accesses the hardware**, and only through an authorized Model Context
+  Protocol (MCP) camera server. Every call is checked by a `SessionGate` against a session
+  envelope that a human approved (SHA-256-bound).
+
+**Three physical experiments** (all `PASS`):
+
+| ID | Experiment | Who chooses the camera actions |
+|---|---|---|
+| **D4** | Fixed physical MCP diagnostic | A fixed six-call script (no model) |
+| **D5A** | Adaptive LLM experiment | The language model, one MCP call at a time |
+| **D6A** | Four-agent physical LUMEN | The four HW1 roles; the Executor's model selects every MCP call |
+
+**Offline tests:** 1004 passing HW3 offline tests (`hw3/tests/`, no camera, network or API key
+required).
+
+**Documentation:**
+
+- [`hw3/README.md`](hw3/README.md) — setup, safety controls, how to run D4/D5A/D6A, results
+- [`submission/HW3_Report_Final.md`](submission/HW3_Report_Final.md) — final technical report
+- [`hw3/docs/system_diagrams.md`](hw3/docs/system_diagrams.md) — HW1–HW3 architecture and
+  sequence diagrams (eight figures)
+- [`hw3/docs/physical_experiments.md`](hw3/docs/physical_experiments.md) — evidence register
+  for D4, D5A and D6A
+
+---
+
+# Homework 1 — Tasks 5 and 6
+
+This part of the repository contains the code for the two HW1 coding tasks.
 
 ## Results at a glance
 
