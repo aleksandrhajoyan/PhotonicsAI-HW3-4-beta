@@ -23,6 +23,15 @@ Lifecycle (one camera per instance, sequential SDK use only):
                        retried), validate unpadded Mono8, copy into NumPy-owned
                        memory, ReleaseFrame once, StopGrabbing. A CameraFrame is
                        returned only when every step succeeded.
+    capture_series()   StartGrabbing once, then at most n_frames sequential IMV_GetFrame
+                       calls (each bounded by frame_timeout_ms and the remaining
+                       series deadline), each validated as unpadded Mono8, copied
+                       into one reused NumPy buffer, released once, reduced to a
+                       FrameSample (mean DN, saturation fraction); StopGrabbing once.
+                       A FrameSeries is returned only when all n_frames were
+                       collected within max_duration_s and every release and the
+                       stop succeeded; otherwise IRaypleCameraError is raised and no
+                       series is returned. Raw frames are never retained.
     close()            release/stop anything still outstanding, restore and verify
                        the original ExposureTime if any write was attempted, Close,
                        DestroyHandle. Failures raise IRaypleCloseError.
@@ -32,6 +41,14 @@ counter (1, 2, 3, ...). Grabbing restarts and reopening never reset it, and it i
 not a camera-native identifier. The SDK's IMV_FrameInfo.blockId (the real camera
 reported 1 on successive single-frame acquisitions) is kept separately as
 get_info()["last_native_block_id"].
+
+Frame series: FrameSample.native_block_id is IMV_FrameInfo.blockId and
+FrameSample.device_timestamp_raw is IMV_FrameInfo.timeStamp, both stored unscaled
+and never renumbered, interpolated or converted (the timeStamp unit is not
+established). host_t_ns is time.perf_counter_ns() read immediately after
+IMV_GetFrame returns: a host arrival time, not an exposure time. A series does
+not advance frames_acquired or last_native_block_id, which describe
+capture_frame() only.
 
 ExposureTime unit: microseconds, per the operator's MV Viewer check recorded for
 HW3 (irayple_exposure_sweep --unit-us-verified); the installed SDK headers do not
@@ -46,6 +63,7 @@ import contextlib
 import ctypes
 import math
 import threading
+import time
 from numbers import Real
 
 import numpy as np
@@ -55,6 +73,7 @@ import irayple_exposure_info as exposure_info
 import irayple_exposure_sweep as exposure_sweep
 import irayple_first_frame as first_frame
 from camera_contract import SOURCE_HARDWARE, CameraFrame
+from frame_series_contract import STATUS_COMPLETED, FrameSample, FrameSeries
 
 EXPECTED_MODEL = discovery.EXPECTED_MODEL
 EXPOSURE_FEATURE = exposure_info.EXPOSURE_FEATURE
@@ -65,6 +84,11 @@ BIT_DEPTH = 8
 PIXEL_FORMAT = "Mono8"
 EXPOSURE_UNIT_BASIS = exposure_sweep.UNIT_BASIS
 FRAME_ID_BASIS = "per-backend successful-acquisition counter; not a camera-native identifier"
+SATURATION_DN = 2**BIT_DEPTH - 1
+# Internal safety limits for capture_series(); not a substitute for a human-approved session gate.
+MAX_SERIES_FRAMES = 512
+MAX_SERIES_DURATION_S = 5.0
+MAX_SERIES_FRAME_TIMEOUT_MS = GET_FRAME_TIMEOUT_MS
 REQUIRED_SDK_ATTRIBUTES = (
     "MvCamera", "IMV_DeviceList", "IMV_Frame", "IMV_String", "IMV_OK",
     "IMV_EInterfaceType", "IMV_ECreateHandleMode", "IMV_EPixelType",
@@ -144,6 +168,21 @@ class IRaypleCloseError(IRaypleCameraError):
     @property
     def cleanup_ok(self):
         return all(step.ok for step in self.steps)
+
+
+def _validate_series_request(n_frames, frame_timeout_ms, max_duration_s):
+    for name, value, maximum in (("n_frames", n_frames, MAX_SERIES_FRAMES),
+                                 ("frame_timeout_ms", frame_timeout_ms, MAX_SERIES_FRAME_TIMEOUT_MS)):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+            raise TypeError(f"{name} must be an integer, got {type(value).__name__}")
+        if not 1 <= value <= maximum:
+            raise ValueError(f"{name} must be in [1, {maximum}], got {value}")
+    if isinstance(max_duration_s, bool) or not isinstance(max_duration_s, Real):
+        raise TypeError(f"max_duration_s must be a real number, got {type(max_duration_s).__name__}")
+    max_duration_s = float(max_duration_s)
+    if not (math.isfinite(max_duration_s) and 0 < max_duration_s <= MAX_SERIES_DURATION_S):
+        raise ValueError(f"max_duration_s must be in (0, {MAX_SERIES_DURATION_S}], got {max_duration_s}")
+    return int(n_frames), int(frame_timeout_ms), max_duration_s
 
 
 def _format_step(step):
@@ -378,6 +417,14 @@ class IRaypleCamera:
         self._check("GET_FRAME_FAILED", f"IMV_GetFrame (timeout {GET_FRAME_TIMEOUT_MS} ms, not retried)", code)
         self._frame = frame
 
+        meta = self._validated_mono8(frame)
+        # Copy into NumPy-owned memory before the SDK buffer is released.
+        pixels = np.empty((meta["height"], meta["width"]), dtype=np.uint8)
+        ctypes.memmove(pixels.ctypes.data, frame.pData, meta["size"])
+        return pixels, meta["frame_id"]  # validate_frame_metadata's frame_id is the native blockId
+
+    def _validated_mono8(self, frame):
+        """Existing frame safety checks: metadata bounds, then unpadded Mono8 with size == width*height."""
         try:
             meta = first_frame.validate_frame_metadata(self._sdk, frame)
         except first_frame.CaptureError as exc:
@@ -388,11 +435,114 @@ class IRaypleCamera:
             raise self._error("INVALID_LAYOUT", "Mono8 frame reports padding; row layout not verified")
         if meta["size"] != meta["width"] * meta["height"]:
             raise self._error("INVALID_LAYOUT", "Mono8 payload size does not equal width*height")
+        return meta
 
-        # Copy into NumPy-owned memory before the SDK buffer is released.
-        pixels = np.empty((meta["height"], meta["width"]), dtype=np.uint8)
-        ctypes.memmove(pixels.ctypes.data, frame.pData, meta["size"])
-        return pixels, meta["frame_id"]  # validate_frame_metadata's frame_id is the native blockId
+    # -- frame series --------------------------------------------------------
+
+    def _acquire_series(self, n_frames, frame_timeout_ms, deadline_ns):
+        """StartGrabbing once and collect n_frames scalar samples. Releases each frame; does not stop.
+
+        One NumPy buffer is reused for every frame: SDK memory is copied into it
+        and the frame is released before any statistic is computed, so no SDK
+        memory is read after release and no raw frame outlives its iteration.
+        """
+        self._check("START_GRABBING_FAILED", "IMV_StartGrabbing", self._camera.IMV_StartGrabbing())
+        self._grabbing = True
+
+        buffer = None
+        samples = []
+        for index in range(n_frames):
+            progress = f"frame {index + 1} of {n_frames}"
+            remaining_ms = (deadline_ns - time.perf_counter_ns()) // 1_000_000
+            if remaining_ms < 1:
+                raise self._error("SERIES_DEADLINE_EXCEEDED",
+                                  f"series deadline reached before {progress}; {index} frame(s) collected")
+            timeout_ms = int(min(frame_timeout_ms, remaining_ms))
+
+            frame = self._sdk.IMV_Frame()
+            code = self._camera.IMV_GetFrame(frame, timeout_ms)
+            host_t_ns = time.perf_counter_ns()
+            self._check("GET_FRAME_FAILED",
+                        f"IMV_GetFrame for {progress} (timeout {timeout_ms} ms, not repeated); "
+                        f"{index} frame(s) collected", code)
+            self._frame = frame
+            if host_t_ns > deadline_ns:
+                raise self._error("SERIES_DEADLINE_EXCEEDED",
+                                  f"{progress} arrived after the series deadline; {index} frame(s) collected")
+
+            meta = self._validated_mono8(frame)
+            if buffer is None:
+                buffer = np.empty((meta["height"], meta["width"]), dtype=np.uint8)
+            elif (meta["height"], meta["width"]) != buffer.shape:
+                raise self._error("INVALID_LAYOUT",
+                                  f"{progress} is {meta['width']}x{meta['height']}, the series started at "
+                                  f"{buffer.shape[1]}x{buffer.shape[0]}")
+            native_block_id = meta["frame_id"]
+            device_timestamp_raw = int(frame.frameInfo.timeStamp)
+            ctypes.memmove(buffer.ctypes.data, frame.pData, meta["size"])
+
+            frame, self._frame = self._frame, None
+            step = self._native_step("IMV_ReleaseFrame", lambda: self._camera.IMV_ReleaseFrame(frame))
+            if not step.ok:
+                raise self._error("FRAME_LIFECYCLE_FAILED", f"{progress}: {_format_step(step)}")
+
+            samples.append((index, native_block_id, device_timestamp_raw, host_t_ns,
+                            float(buffer.mean()),
+                            np.count_nonzero(buffer == SATURATION_DN) / buffer.size))
+        return samples, buffer.shape
+
+    def capture_series(self, n_frames, *, frame_timeout_ms, max_duration_s):
+        """Acquire n_frames consecutive Mono8 frames in one grabbing session and return a FrameSeries.
+
+        n_frames          int, 1 .. MAX_SERIES_FRAMES
+        frame_timeout_ms  int, 1 .. MAX_SERIES_FRAME_TIMEOUT_MS; each IMV_GetFrame
+                          timeout is further limited by the remaining series time
+        max_duration_s    real, 0 < value <= MAX_SERIES_DURATION_S, measured on
+                          time.perf_counter_ns from just before IMV_StartGrabbing
+
+        Returns a completed hardware FrameSeries (synthetic_device_tick_hz None).
+        Any failure raises and returns nothing; a partial series is never returned.
+        """
+        with self._exclusive("capture_series"):
+            self._require_open("capture_series")
+            n_frames, frame_timeout_ms, max_duration_s = _validate_series_request(
+                n_frames, frame_timeout_ms, max_duration_s)
+            if self._exposure_us is None:
+                raise self._error(
+                    "EXPOSURE_UNVERIFIED",
+                    f"{EXPOSURE_FEATURE} has no verified readback since the last write attempt; refusing to acquire",
+                )
+            self._require_idle("capture_series")
+            exposure_us = self._exposure_us
+            deadline_ns = time.perf_counter_ns() + int(max_duration_s * 1e9)
+            try:
+                rows, (height, width) = self._acquire_series(n_frames, frame_timeout_ms, deadline_ns)
+            except BaseException as exc:
+                failed = [step for step in self._end_acquisition() if not step.ok]
+                if failed:
+                    exc.add_note("acquisition cleanup also failed: " + ", ".join(map(_format_step, failed)))
+                raise
+            failed = [step for step in self._end_acquisition() if not step.ok]
+            if failed:
+                raise self._error(
+                    "FRAME_LIFECYCLE_FAILED",
+                    "series discarded because " + ", ".join(map(_format_step, failed)),
+                )
+            try:
+                return FrameSeries(
+                    samples=tuple(FrameSample(*row) for row in rows),
+                    requested_frames=n_frames,
+                    acquired_frames=len(rows),
+                    exposure_us=exposure_us,
+                    width=width,
+                    height=height,
+                    bit_depth=BIT_DEPTH,
+                    source=SOURCE_HARDWARE,
+                    status=STATUS_COMPLETED,
+                )
+            except (TypeError, ValueError) as exc:
+                raise self._error("SERIES_CONTRACT_VIOLATION",
+                                  f"SDK frame metadata does not satisfy the FrameSeries contract: {exc}") from exc
 
     def _end_acquisition(self):
         """Release the outstanding frame exactly once, then stop grabbing if it is running."""
